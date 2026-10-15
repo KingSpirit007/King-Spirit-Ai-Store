@@ -37,6 +37,32 @@ export default async function initial_data_seed({
 
   const countries = ["gb", "de", "dk", "se", "fr", "es", "it"];
 
+  // ---------------------------------------------------------------------------
+  // Idempotency guard.
+  //
+  // This script creates a store, a sales channel, a publishable API key, a
+  // region, fulfillment data and the demo catalog. It must therefore never run
+  // twice against the same database. Medusa only records a migration script as
+  // completed once it returns, so a script that throws part-way through is
+  // re-executed on the next boot. That is exactly what happened here: the
+  // script created the store/sales channel/API key and then failed at
+  // `createRegionsWorkflow` ("countries already assigned to a region"), so it
+  // re-ran on every boot and silently appended another store, sales channel and
+  // publishable key each time. Returning early when a store already exists
+  // makes the script safe to re-run and lets it finally be recorded as done.
+  const { data: existingStores } = await query.graph({
+    entity: "store",
+    fields: ["id"],
+  });
+
+  if (existingStores.length > 0) {
+    logger.info(
+      "Store data already present — skipping initial data seed."
+    );
+    return;
+  }
+  // ---------------------------------------------------------------------------
+
   logger.info("Seeding store data...");
   const {
     result: [defaultSalesChannel],
