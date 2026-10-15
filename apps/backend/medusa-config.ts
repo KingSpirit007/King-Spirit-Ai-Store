@@ -37,6 +37,52 @@ const redisModules = REDIS_URL
     ]
   : []
 
+/**
+ * Payment providers.
+ *
+ * PayPal is registered only when both credentials are present. Registering it
+ * without credentials would make the provider validate its options at boot and
+ * fail the whole service, so an unconfigured store keeps running exactly as it
+ * did before any credentials exist.
+ *
+ * Once registered, a provider still has to be enabled on a region in the admin
+ * dashboard before a customer can select it.
+ *
+ * The cryptocurrency provider in `src/modules/payment-crypto` is deliberately
+ * NOT listed here. Medusa only loads modules that appear in this array, so an
+ * unregistered module cannot be offered at checkout. Crypto payments must stay
+ * inactive until the regulatory reassessment is complete; see the header of
+ * that module for the gate and the activation checklist.
+ */
+const paypalClientId = process.env.PAYPAL_CLIENT_ID
+const paypalClientSecret = process.env.PAYPAL_CLIENT_SECRET
+
+const paymentModules =
+  paypalClientId && paypalClientSecret
+    ? [
+        {
+          resolve: '@medusajs/medusa/payment',
+          options: {
+            providers: [
+              {
+                resolve: './src/modules/payment-paypal',
+                id: 'paypal',
+                options: {
+                  clientId: paypalClientId,
+                  clientSecret: paypalClientSecret,
+                  // Default to sandbox. Live requires an explicit opt-in, so a
+                  // missing variable can never accidentally take real money.
+                  sandbox: process.env.PAYPAL_SANDBOX !== 'false',
+                  webhookId: process.env.PAYPAL_WEBHOOK_ID,
+                  brandName: process.env.PAYPAL_BRAND_NAME,
+                },
+              },
+            ],
+          },
+        },
+      ]
+    : []
+
 module.exports = defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
@@ -51,5 +97,5 @@ module.exports = defineConfig({
       cookieSecret: process.env.COOKIE_SECRET,
     }
   },
-  modules: [...redisModules],
+  modules: [...redisModules, ...paymentModules],
 })
